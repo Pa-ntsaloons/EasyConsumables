@@ -1,0 +1,60 @@
+<h1>EasyConsumables</h1>
+<p><strong>Always press the right button.</strong> EasyConsumables keeps a set of macros pointed at the best food, drink, potions, healthstones and bandages in your bags, and updates them automatically whenever your bags change. Mages get macros that conjure the right rank of water and food for whoever they're targeting.</p>
+<p>No item lists to go out of date: every consumable's tooltip is read, so it works with any food, potion or bandage the game has.</p>
+<hr>
+<h2>Macros</h2>
+<table>
+<thead>
+<tr><th>Macro</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>EC Food</strong></td><td>Your best food</td></tr>
+<tr><td><strong>EC Drink</strong></td><td>Your best drink</td></tr>
+<tr><td><strong>EC Health</strong></td><td>Your best health potion or Healthstone</td></tr>
+<tr><td><strong>EC Mana</strong></td><td>Your best mana potion or mana gem</td></tr>
+<tr><td><strong>EC Bandage</strong></td><td>Your best bandage you have the First Aid skill for. Uses it on your mouseover, then your friendly target, then yourself.</td></tr>
+<tr><td><strong>EC Combo</strong> + <strong>EC Combo MP</strong></td><td>One button per side: food or drink out of combat, health or mana potion in combat.</td></tr>
+<tr><td><strong>EC Mage</strong> + <strong>EC Mage Food</strong></td><td><em>Mages only.</em> Conjures water / food at the highest rank your targeted friendly player can use for their level.</td></tr>
+</tbody>
+</table>
+<p>Turn macros on or off in <code>/ec</code>, then click or drag them from the options page straight onto your action bar.</p>
+<h2>Smart picking</h2>
+<ul>
+<li><strong>Best item wins.</strong> The item that restores the most is used.</li>
+<li><strong>Conjured first on a tie.</strong> Mage food is used before bought food that's just as good, but a bought item that's <em>better</em> is still used.</li>
+<li><strong>Skips what you can't use.</strong> Items above your level or First Aid skill are ignored.</li>
+<li><strong>Well Fed (XP buff) food, your call.</strong> By default it's never used, so it's saved. Turn on <em>Use Well Fed (XP buff) food first</em> to eat it before anything else and keep the buff up while leveling.</li>
+<li><strong>Healthstones before potions</strong>, since they're free and have their own cooldown (optional).</li>
+<li><strong>Ignore list:</strong> <code>/ec ignore &lt;item&gt;</code> (shift-click the item) keeps it out of every macro.</li>
+</ul>
+<h2>Combo macros</h2>
+<p>Turn them on in <code>/ec</code>. By default you get two:</p>
+<ul>
+<li><strong>EC Combo:</strong> food out of combat, health potion in combat.</li>
+<li><strong>EC Combo MP:</strong> drink out of combat, mana potion in combat.</li>
+</ul>
+<p>Prefer a single button? Switch to <strong>one macro</strong>:</p>
+<ul>
+<li>In combat it uses a health potion, or a mana potion while you hold a modifier (Shift, Ctrl or Alt).</li>
+<li>Out of combat it either <strong>eats and drinks at the same time</strong>, or <strong>eats, with the modifier for drink</strong>. Your choice.</li>
+</ul>
+<h2>Mages: conjure for your target</h2>
+<p>Target a friendly player and press <strong>EC Mage</strong> for water or <strong>EC Mage Food</strong> for food. The highest rank <em>they</em> can use at their level is picked automatically, so no more Crystal Water for a level 30. With no target, it uses your level.</p>
+<p><strong>Alt-click</strong> either macro to open a trade with your target and fill it with conjured water and food they can use. You just click Trade.</p>
+<p>Prefer one button? Switch to a single <strong>EC Mage</strong> macro: click for water, Shift-click for food.</p>
+<h2>Commands</h2>
+<ul>
+<li><code>/ec</code>: open options</li>
+<li><code>/ec status</code>: show what each macro is currently using</li>
+<li><code>/ec update</code>: rescan your bags now</li>
+<li><code>/ec ignore &lt;item&gt;</code> / <code>/ec unignore &lt;item&gt;</code>: shift-click an item to add or remove it from the ignore list</li>
+<li><code>/ec ignorelist</code>: show ignored items</li>
+<li><code>/ec help</code>: list all commands</li>
+</ul>
+<h2>Good to know</h2>
+<ul>
+<li><strong>Combat:</strong> the game doesn't allow macros to be edited during combat, so changes made in combat apply the moment it ends.</li>
+<li><strong>Macro slots:</strong> macros are created as character-specific by default. Each uses one of your macro slots.</li>
+<li><strong>Language:</strong> requires an <strong>English</strong> game client (it reads tooltip text).</li>
+</ul>
+<p>Bugs or ideas? Leave a comment. Please include what the macro did and what you expected.</p>
