@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: EasyConsumables
+## Notes: Keeps macros pointed at the best food, drink, potions, healthstones and bandages in your bags.
+## Category: Inventory
+## Author: Pa_nts
+## Version: 1.0.1
+## SavedVariables: EasyConsumablesDB
+## IconTexture: Interface\Icons\INV_Misc_Food_15
+
+Core.lua
+Options.lua
