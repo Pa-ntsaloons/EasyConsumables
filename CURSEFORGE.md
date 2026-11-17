@@ -25,9 +25,9 @@ Turn macros on or off in `/ec`, then click or drag them from the options page st
 - **Best item wins.** The item that restores the most is used.
 - **Conjured first on a tie.** Mage food is used before bought food that's just as good, but a bought item that's *better* is still used.
 - **Skips what you can't use.** Items above your level or First Aid skill are ignored.
-- **Well Fed (XP buff) food, your call.** Saved by default; turn on "Use Well Fed (XP buff) food first" to eat it before anything else and keep the buff up while leveling.
+- **Well Fed (XP buff) food, your call.** By default it's never used, so it's saved. Turn on *Use Well Fed (XP buff) food first* to eat it before anything else and keep the buff up while leveling.
 - **Healthstones before potions**, since they're free and have their own cooldown (optional).
-- **Ignore list:** `/ec ignore [item]` keeps a specific item out of every macro.
+- **Ignore list:** `/ec ignore <item>` (shift-click the item) keeps it out of every macro.
 
 ## Combo macros
 
@@ -52,7 +52,9 @@ Prefer one button? Switch to a single **EC Mage** macro: click for water, Shift-
 - `/ec`: open options
 - `/ec status`: show what each macro is currently using
 - `/ec update`: rescan your bags now
-- `/ec ignore <item>` / `/ec unignore <item>` / `/ec ignorelist`
+- `/ec ignore <item>` / `/ec unignore <item>`: shift-click an item to add or remove it from the ignore list
+- `/ec ignorelist`: show ignored items
+- `/ec help`: list all commands
 
 ## Good to know
 
