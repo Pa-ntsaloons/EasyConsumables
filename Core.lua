@@ -93,8 +93,7 @@ local DEFAULTS = {
     mageStyle = "split",         -- "single" = EC Mage (click water, Shift food), "split" = EC Mage (water) + EC Mage Food
     useBuffFood = false,         -- buff food (Well Fed / XP / stat buffs). Off: never used, so it's saved. On: may be used
     buffFoodFirst = true,        -- with useBuffFood: eat it before other food/drink (off: ranked like any other food)
-    buffFoods = {},              -- [itemID] = true: buff foods seen in your bags (listed in the options)
-    buffFoodOff = {},            -- [itemID] = true: buff foods switched off individually
+    seen = {},                   -- [itemID] = category letters: every consumable you've had (Consumables page)
     preferConjured = false,      -- use conjured items first even if weaker
     preferHealthstone = true,    -- healthstones beat potions for the health macro
     bandageSmartTarget = true,   -- mouseover / friendly target, falls back to self
@@ -428,6 +427,29 @@ local function ForEachConsumable(fn)
     end
 end
 
+-- Which Consumables-page categories an item belongs to, as letters:
+-- f = food, d = drink, b = buff food, h = health potion / Healthstone, m = mana potion / gem, n = bandage
+function EC.Categories(info)
+    local c = ""
+    local buff = info.buff and (info.food or info.drink)
+    if info.food and not buff then c = c .. "f" end
+    if info.drink and not buff then c = c .. "d" end
+    if buff then c = c .. "b" end
+    if info.hpot then c = c .. "h" end
+    if info.mpot then c = c .. "m" end
+    if info.bandage then c = c .. "n" end
+    return c
+end
+
+-- Remember every consumable you've had, for the Consumables page.
+function EC:RememberItem(id, info)
+    local c = EC.Categories(info)
+    if c ~= "" and self.db.seen[id] ~= c then
+        self.db.seen[id] = c
+        if self.OnSeenChanged then self:OnSeenChanged() end
+    end
+end
+
 -- Returns { food = entry, drink = entry, ... } where entry = { itemID, value, count, info }
 function EC:Scan()
     local db = self.db
@@ -435,6 +457,7 @@ function EC:Scan()
     local items = {} -- [itemID] = { info, count }
 
     ForEachConsumable(function(_, _, id, count, _, info)
+        self:RememberItem(id, info)
         if db.ignored[id] then return end
         if items[id] then
             items[id].count = items[id].count + count
@@ -457,11 +480,7 @@ function EC:Scan()
                     table.insert(candidates[cat], { itemID = id, value = value, count = it.count, info = info })
                 end
             end
-            local isBuffFood = info.buff and (info.food or info.drink)
-            if isBuffFood and not db.buffFoods[id] then
-                db.buffFoods[id] = true -- remember it for the per-item list in the options
-            end
-            local skipBuff = isBuffFood and (not db.useBuffFood or db.buffFoodOff[id])
+            local skipBuff = info.buff and (info.food or info.drink) and not db.useBuffFood
             if info.food and not skipBuff then add("food", Value(info.food, maxHP)) end
             if info.drink and not skipBuff then add("drink", Value(info.drink, maxMana)) end
             if info.hpot then add("health", Value(info.hpot, maxHP)) end
@@ -963,6 +982,15 @@ EC:SetScript("OnEvent", function(self, event, arg1)
                 self.db.useXpFood, self.db.xpFoodFirst = nil, nil
                 self.db.settingsVersion = 4
             end
+            -- v5: the buff food list became the Consumables page; switched-off buff foods are ignored items.
+            if self.db.settingsVersion < 5 then
+                for id in pairs(self.db.buffFoodOff or {}) do self.db.ignored[id] = true end
+                for id in pairs(self.db.buffFoods or {}) do
+                    if not self.db.seen[id] then self.db.seen[id] = "b" end
+                end
+                self.db.buffFoods, self.db.buffFoodOff = nil, nil
+                self.db.settingsVersion = 5
+            end
             if self.InitOptions then self:InitOptions() end
         end
         HookMacroFrame() -- Blizzard_MacroUI is load-on-demand
@@ -1086,6 +1114,8 @@ SlashCmdList.EASYCONSUMABLES = function(msg)
         EC:PrintStatus()
     elseif cmd == "debug" then
         EC:PrintDebug()
+    elseif cmd == "list" or cmd == "items" then
+        EC:OpenConsumables()
     elseif cmd == "update" or cmd == "refresh" then
         EC:ClearCache()
         EC:Update()
@@ -1113,6 +1143,7 @@ SlashCmdList.EASYCONSUMABLES = function(msg)
         print("  /ec - open options")
         print("  /ec status - show the current best item for each macro")
         print("  /ec update - rescan bags and rewrite macros now")
+        print("  /ec list - open the Consumables page (turn items on/off)")
         print("  /ec debug - list bag consumables and how each was read")
         print("  /ec ignore <item> - never pick this item (shift-click it into chat)")
         print("  /ec unignore <item> - allow an ignored item again")

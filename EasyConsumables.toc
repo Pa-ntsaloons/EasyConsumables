@@ -11,3 +11,4 @@ Locales.lua
 Core.lua
 Cooldowns.lua
 Options.lua
+Consumables.lua

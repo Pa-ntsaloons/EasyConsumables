@@ -25,7 +25,8 @@ Turn macros on or off in `/ec`, then click or drag them from the options page st
 - **Best item wins.** The item that restores the most is used.
 - **Conjured first on a tie.** Mage food is used before bought food that's just as good, but a bought item that's *better* is still used.
 - **Skips what you can't use.** Items above your level or First Aid skill are ignored.
-- **Buff food, your call.** Food and drink that give a buff (Well Fed / XP, stats and so on) are never used by default, so they're saved. Turn on *Use buff food* to allow them, choose whether to *Eat it before other food*, and switch individual buff foods on or off.
+- **Buff food, your call.** Food and drink that give a buff (Well Fed / XP, stats and so on) are never used by default, so they're saved. Turn on *Use buff food* to allow them, and choose whether to *Eat it before other food*.
+- **Consumables page.** Every consumable you've had, sorted into Food, Drink, Buff Food, Health, Mana and Bandages, each with an on/off switch. Turn something off and it's never used.
 - **Healthstones before potions**, since they're free and have their own cooldown (optional).
 - **Ignore list:** `/ec ignore <item>` (shift-click the item) keeps it out of every macro.
 
@@ -52,6 +53,7 @@ Prefer one button? Switch to a single **EC Mage** macro: click for water, Shift-
 - `/ec`: open options
 - `/ec status`: show what each macro is currently using
 - `/ec update`: rescan your bags now
+- `/ec list`: open the Consumables page
 - `/ec debug`: list your bag consumables and how each was read
 - `/ec ignore <item>` / `/ec unignore <item>`: shift-click an item to add or remove it from the ignore list
 - `/ec ignorelist`: show ignored items

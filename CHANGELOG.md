@@ -7,10 +7,13 @@
 - Macros are no longer created before the game has loaded your macro list, which could make duplicates at login.
 - Numbers with a comma decimal ("61,2") are read correctly.
 
+### Consumables page
+- New **Consumables** page (under EasyConsumables in the AddOns settings, or `/ec list`) lists every consumable you've had, sorted into Food, Drink, Buff Food, Health Potions & Healthstones, Mana Potions & Gems, and Bandages.
+- Each item has an on/off switch. Off puts it on the ignore list, so it's never used. Off items are greyed out, and you can show only what's in your bags.
+
 ### Buff food
-- Buff food has its own section in the options and now covers any food or drink that gives a buff (Well Fed / XP, stats and so on), not just Well Fed.
-- **Use buff food** turns it on or off as a whole, and **Eat it before other food** puts it first.
-- Every buff food you've had is listed with its own on/off switch, so you can save specific ones. Right-click one to remove it from the list.
+- Buff food now covers any food or drink that gives a buff (Well Fed / XP, stats and so on), not just Well Fed.
+- **Use buff food** turns it on or off as a whole, and **Eat it before other food** puts it first. Single buff foods are switched on or off on the Consumables page.
 - Your old Well Fed setting carries over.
 
 ### Cooldowns on your action bar

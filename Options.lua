@@ -402,110 +402,13 @@ local function BuildPanel()
     local buffOn = function() return EC.db.useBuffFood end
     Check("Use buff food",
         "Food and drink that also give a buff: Well Fed (the XP buff), stats, and so on.\n"
-            .. "Off: it's never used, so it's saved.\nOn: it can be picked, and you can switch single items off below.",
+            .. "Off: it's never used, so it's saved.\nOn: it can be picked. Turn single items off on the Consumables page.",
         function() return EC.db.useBuffFood end, function(v) EC.db.useBuffFood = v end)
     Check("Eat it before other food",
         "On: buff food is eaten before anything else, even if it restores less, to keep the buff up.\n"
             .. "Off: it's only picked when it's the best food you have.",
         function() return EC.db.buffFoodFirst end, function(v) EC.db.buffFoodFirst = v end,
         24, buffOn)
-    local listTitle = Text("GameFontNormalSmall", "Buff foods you've had (turn one off to never use it):", 28, 18)
-    table.insert(refreshers, function()
-        listTitle:SetFontObject(buffOn() and "GameFontNormalSmall" or "GameFontDisableSmall")
-    end)
-
-    -- The list changes as new buff foods turn up, so everything after it hangs off its bottom.
-    local buffBlock = CreateFrame("Frame", nil, content)
-    buffBlock:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + 24, y)
-    buffBlock:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
-    buffBlock:SetHeight(1)
-    local buffRows = {}
-    local emptyText = buffBlock:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    emptyText:SetPoint("TOPLEFT", 4, -4)
-    emptyText:SetText("None yet. Buff foods show up here once they've been in your bags.")
-
-    local GetCount = (C_Item and C_Item.GetItemCount) or GetItemCount
-
-    local function BuffRow(i)
-        if buffRows[i] then return buffRows[i] end
-        local cb = CreateFrame("CheckButton", nil, buffBlock, "UICheckButtonTemplate")
-        cb:SetSize(22, 22)
-        cb:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        cb.icon = cb:CreateTexture(nil, "ARTWORK")
-        cb.icon:SetSize(18, 18)
-        cb.icon:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-        cb.text = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        cb.text:SetPoint("LEFT", cb.icon, "RIGHT", 6, 0)
-        cb.text:SetJustifyH("LEFT")
-        cb:SetHitRectInsets(0, -300, 0, 0)
-        cb:SetScript("OnClick", function(self, button)
-            local id = self.itemID
-            if button == "RightButton" then
-                -- Forget it (it comes back if it's in your bags again).
-                EC.db.buffFoods[id] = nil
-                EC.db.buffFoodOff[id] = nil
-            else
-                EC.db.buffFoodOff[id] = (not self:GetChecked()) or nil
-            end
-            EC:RequestUpdate()
-            Refresh()
-        end)
-        cb:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetItemByID(self.itemID)
-            GameTooltip:AddLine(" ")
-            GameTooltip:AddLine("On: can be used. Off: never used.", 0, 1, 0, true)
-            GameTooltip:AddLine("Right-click to remove it from this list.", 0.6, 0.6, 0.6, true)
-            GameTooltip:Show()
-        end)
-        cb:SetScript("OnLeave", GameTooltip_Hide)
-        buffRows[i] = cb
-        return cb
-    end
-
-    table.insert(refreshers, function()
-        local ids = {}
-        for id in pairs(EC.db.buffFoods) do table.insert(ids, id) end
-        local names = {}
-        for _, id in ipairs(ids) do
-            names[id] = Compat.GetItemName(id)
-            if not names[id] and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
-        end
-        table.sort(ids, function(a, b) return (names[a] or ("~" .. a)) < (names[b] or ("~" .. b)) end)
-
-        local on = buffOn()
-        for i, id in ipairs(ids) do
-            local cb = BuffRow(i)
-            cb.itemID = id
-            cb:ClearAllPoints()
-            cb:SetPoint("TOPLEFT", buffBlock, "TOPLEFT", 0, -(i - 1) * 22)
-            cb:SetChecked(not EC.db.buffFoodOff[id])
-            cb:SetEnabled(on)
-            cb.icon:SetTexture(Compat.GetItemIcon(id) or 134400)
-            local itemOn = on and not EC.db.buffFoodOff[id]
-            cb.icon:SetDesaturated(not itemOn)
-            cb.icon:SetAlpha(itemOn and 1 or 0.5)
-            local _, _, quality = Compat.GetItemInfo(id)
-            local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-                and ITEM_QUALITY_COLORS[quality].hex or "|cffffffff"
-            if not itemOn then color = "|cff808080" end
-            local count = GetCount and GetCount(id) or 0
-            cb.text:SetText(("%s%s|r  |cff888888%s|r"):format(color, names[id] or ("item " .. id),
-                count > 0 and ("x" .. count) or "not in bags"))
-            cb:Show()
-        end
-        for i = #ids + 1, #buffRows do buffRows[i]:Hide() end
-        emptyText:SetShown(#ids == 0)
-        buffBlock:SetHeight(#ids > 0 and #ids * 22 or 20)
-    end)
-
-    local part1Height = -y
-    local part1 = content
-    local part2 = CreateFrame("Frame", nil, part1)
-    part2:SetPoint("TOPLEFT", buffBlock, "BOTTOMLEFT", -(PAD + 24), -4)
-    part2:SetPoint("TOPRIGHT", buffBlock, "BOTTOMRIGHT", PAD, -4)
-    content = part2
-    y = 0
 
     -- Rules -----------------------------------------------------------------
     Header("Rules")
@@ -526,18 +429,29 @@ local function BuildPanel()
         end)
     end
 
+    -- Consumables page ------------------------------------------------------
+    Header("Consumables")
+    Text("GameFontHighlightSmall",
+        "Every consumable you've had, sorted into Food, Drink, Buff Food, Health, Mana and Bandages. "
+        .. "Turn one off and it's never used (it goes on the ignore list).", 0, 28)
+    local listBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    listBtn:SetSize(180, 22)
+    listBtn:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y)
+    listBtn:SetText("Open Consumables page")
+    listBtn:SetScript("OnClick", function() EC:OpenConsumables() end)
+    Advance(26)
+
     Advance(8)
-    Text("GameFontDisableSmall", "Exclude a specific item: /ec ignore [shift-click item]     All commands: /ec help", 0, 16)
+    Text("GameFontDisableSmall", "Also: /ec list opens that page, /ec ignore [shift-click item] ignores one.     All commands: /ec help", 0, 16)
     Advance(PAD)
 
-    local part2Height = -y
+    local settingsHeight = -y
     content = outer
     table.insert(refreshers, function()
-        settings:SetHeight(part1Height)
-        part2:SetHeight(part2Height)
-        -- title/description/header (~ top part) + picks + settings above the buff list + list + the rest
+        settings:SetHeight(settingsHeight)
+        -- title/description/header (~ top part) + picks + settings
         local top = select(5, picksBlock:GetPoint(1)) or 0
-        content:SetHeight(-top + picksBlock:GetHeight() + 6 + part1Height + buffBlock:GetHeight() + 4 + part2Height)
+        content:SetHeight(-top + picksBlock:GetHeight() + 6 + settingsHeight)
     end)
 
     panel:SetScript("OnShow", Refresh)
@@ -551,6 +465,8 @@ function EC:InitOptions()
     elseif InterfaceOptions_AddCategory then
         InterfaceOptions_AddCategory(panel)
     end
+    EC.optionsPanel, EC.optionsCategory = panel, category
+    if self.InitConsumablesPage then self:InitConsumablesPage() end
 end
 
 function EC:OnPicksChanged()
