@@ -23,9 +23,7 @@ end
 
 local function ItemText(entry)
     if not entry then return "|cff888888none in bags|r" end
-    local _, _, quality = Compat.GetItemInfo(entry.itemID)
-    local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-        and ITEM_QUALITY_COLORS[quality].hex or "|cffffffff"
+    local color = Compat.QualityColor(entry.itemID)
     return ("%s%s|r  |cffaaaaaax%d  (%d)|r"):format(color, ItemName(entry), entry.count, math.floor(entry.value))
 end
 
@@ -122,7 +120,7 @@ local function PickupFor(def)
     if GetMacroIndexByName(def.name) > 0 then
         PickupMacro(def.name)
     else
-        print("|cff33ff99EasyConsumables|r: " .. def.name .. " doesn't exist yet - tick its box in /ec to enable it.")
+        ns.Print(def.name .. " doesn't exist yet - turn it on in /ec.")
     end
 end
 
@@ -233,11 +231,11 @@ local function RowContent(def, p)
             p.drink or p.mana
     elseif def.key == "mage" then
         if db.mageStyle == "split" then
-            return "Mage: Conjure Water", MageRankText("water"), nil, Compat.GetSpellTexture(5504)
+            return "Mage: Conjure Water", MageRankText("water"), nil, Compat.GetSpellTexture(EC.MAGE_WATER_ICON_SPELL)
         end
-        return def.label, MageRankText(), nil, Compat.GetSpellTexture(5504)
+        return def.label, MageRankText(), nil, Compat.GetSpellTexture(EC.MAGE_WATER_ICON_SPELL)
     elseif def.key == "mageFood" then
-        return def.label, MageRankText("food"), nil, Compat.GetSpellTexture(587)
+        return def.label, MageRankText("food"), nil, Compat.GetSpellTexture(EC.MAGE_FOOD_ICON_SPELL)
     end
     return def.label, ItemText(p[def.key]), p[def.key]
 end
@@ -429,6 +427,19 @@ local function BuildPanel()
         end)
     end
 
+    -- Minimap button --------------------------------------------------------
+    Header("Minimap button")
+    local mmOn = function() return EC.db.minimap.show end
+    Check("Show minimap button",
+        "Left-click: options. Right-click: Consumables page. Shift-click: rescan bags.\nDrag it to move it around the minimap.",
+        function() return EC.db.minimap.show end,
+        function(v) EC:SetMinimapButtonShown(v) end)
+    Check("Fade out until hovered",
+        "On: the button is hidden until you move the mouse over the minimap or the button.\nOff: always visible.",
+        function() return EC.db.minimap.fade end,
+        function(v) EC:SetMinimapButtonFade(v) end,
+        24, mmOn)
+
     -- Consumables page ------------------------------------------------------
     Header("Consumables")
     Text("GameFontHighlightSmall",
@@ -457,7 +468,7 @@ local function BuildPanel()
     panel:SetScript("OnShow", Refresh)
 end
 
-function EC:InitOptions()
+local function InitOptions()
     BuildPanel()
     if Settings and Settings.RegisterCanvasLayoutCategory then
         category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
@@ -466,8 +477,9 @@ function EC:InitOptions()
         InterfaceOptions_AddCategory(panel)
     end
     EC.optionsPanel, EC.optionsCategory = panel, category
-    if self.InitConsumablesPage then self:InitConsumablesPage() end
+    if EC.InitConsumablesPage then EC:InitConsumablesPage() end
 end
+ns.OnReady(InitOptions)
 
 function EC:OnPicksChanged()
     if panel and panel:IsVisible() then Refresh() end
@@ -475,7 +487,7 @@ end
 
 function EC:OpenOptions()
     if InCombatLockdown() then
-        print("|cff33ff99EasyConsumables|r: options can't be opened in combat.")
+        ns.Print("options can't be opened in combat.")
         return
     end
     if category and Settings and Settings.OpenToCategory then

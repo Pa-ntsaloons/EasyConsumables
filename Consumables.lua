@@ -18,17 +18,13 @@ local CATEGORIES = {
 
 local PAD = 16
 local ROW_H = 22
-local GetCount = (C_Item and C_Item.GetItemCount) or GetItemCount
+local GetCount = Compat.GetItemCount
 
 local page, sub, content
 local rows, headers = {}, {}
 local onlyInBags = false
 
-local function ItemName(id)
-    local name = Compat.GetItemName(id)
-    if not name and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
-    return name
-end
+local ItemName = Compat.ItemNameOrLoad
 
 ---------------------------------------------------------------------------
 -- Pooled widgets
@@ -140,10 +136,7 @@ Refresh = function()
                 cb.icon:SetTexture(Compat.GetItemIcon(id) or 134400)
                 cb.icon:SetDesaturated(not on)
                 cb.icon:SetAlpha(on and 1 or 0.5)
-                local _, _, quality = Compat.GetItemInfo(id)
-                local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-                    and ITEM_QUALITY_COLORS[quality].hex or "|cffffffff"
-                if not on then color = "|cff808080" end
+                local color = on and Compat.QualityColor(id) or "|cff808080"
                 local count = GetCount and GetCount(id) or 0
                 cb.text:SetText(("%s%s|r  |cff888888%s|r"):format(color, names[id] or ("item " .. id),
                     count > 0 and ("x" .. count) or "not in bags"))
@@ -217,7 +210,7 @@ end
 
 function EC:OpenConsumables()
     if InCombatLockdown() then
-        print("|cff33ff99EasyConsumables|r: options can't be opened in combat.")
+        ns.Print("options can't be opened in combat.")
         return
     end
     if sub and Settings and Settings.OpenToCategory then
@@ -241,7 +234,5 @@ end
 
 function EC:OnSeenChanged() RefreshSoon() end
 
-local f = CreateFrame("Frame")
-f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-f:RegisterEvent("BAG_UPDATE_DELAYED")
-f:SetScript("OnEvent", RefreshSoon)
+EC:On("GET_ITEM_INFO_RECEIVED", RefreshSoon)
+EC:On("BAG_UPDATE_DELAYED", RefreshSoon)

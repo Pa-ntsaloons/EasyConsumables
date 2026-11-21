@@ -22,11 +22,9 @@ local SOURCE = {
     comboMP = "mana",
 }
 
-local GetItemCooldown = (C_Container and C_Container.GetItemCooldown) or GetItemCooldown
-
 local function ItemCooldown(itemID)
-    if not GetItemCooldown then return 0, 0 end
-    local start, duration = GetItemCooldown(itemID)
+    if not ns.Compat.GetItemCooldown then return 0, 0 end
+    local start, duration = ns.Compat.GetItemCooldown(itemID)
     return start or 0, duration or 0
 end
 
@@ -315,6 +313,8 @@ end
 -- Events
 ---------------------------------------------------------------------------
 
+-- Own frame rather than EC:On: UNIT_AURA is registered for the player only, since it fires
+-- constantly for every unit in groups.
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("ACTIONBAR_SLOT_CHANGED")

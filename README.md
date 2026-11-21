@@ -27,6 +27,7 @@ Action buttons holding `EC Bandage` show your Recently Bandaged wait (bandages h
 - `/ec status`: current picks (and mage ranks for your target)
 - `/ec update`: rescan now
 - `/ec list`: Consumables page (every consumable you've had, on/off per item)
+- `/ec minimap`: show or hide the minimap button
 - `/ec debug`: list bag consumables and how each was read
 - `/ec ignore <shift-click item>` / `/ec unignore` / `/ec ignorelist`
 

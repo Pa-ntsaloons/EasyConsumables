@@ -7,8 +7,16 @@
 ## SavedVariables: EasyConsumablesDB
 ## IconTexture: Interface\Icons\INV_Misc_Food_15
 
+Init.lua
 Locales.lua
-Core.lua
+Settings.lua
+Parser.lua
+Picker.lua
+Mage.lua
+Macros.lua
+Updater.lua
+Commands.lua
 Cooldowns.lua
 Options.lua
 Consumables.lua
+Minimap.lua

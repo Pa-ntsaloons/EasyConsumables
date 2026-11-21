@@ -26,9 +26,14 @@
 - Tooltips are now read in German, French, Spanish, Portuguese (BR), Russian, Chinese and Korean as well as English. Unsupported languages get a one-time notice.
 - New `/ec debug` lists each consumable in your bags and how it was read. Please include it when reporting an item that isn't recognised.
 
+### Minimap button
+- New minimap button: left-click opens the options, right-click the Consumables page, Shift-click rescans your bags; hover it to see your current picks. Drag it to move it around the minimap (round or square).
+- Options to show or hide it (also `/ec minimap`) and to fade it out until you hover over the minimap.
+
 ### Other
 - Battleground-only food, bandages and potions are only picked inside their battleground.
 - Each macro's on/off switch is now next to its row in the options.
+- Code reorganised into smaller files, one per job, with no change in behaviour.
 
 ## 1.0.1 — 2026-11-13
 

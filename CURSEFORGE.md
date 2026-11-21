@@ -27,6 +27,7 @@ Turn macros on or off in `/ec`, then click or drag them from the options page st
 - **Skips what you can't use.** Items above your level or First Aid skill are ignored.
 - **Buff food, your call.** Food and drink that give a buff (Well Fed / XP, stats and so on) are never used by default, so they're saved. Turn on *Use buff food* to allow them, and choose whether to *Eat it before other food*.
 - **Consumables page.** Every consumable you've had, sorted into Food, Drink, Buff Food, Health, Mana and Bandages, each with an on/off switch. Turn something off and it's never used.
+- **Minimap button.** Left-click for options, right-click for the Consumables page, hover to see what each macro is using. Hide it, or let it fade out until you hover over the minimap.
 - **Healthstones before potions**, since they're free and have their own cooldown (optional).
 - **Ignore list:** `/ec ignore <item>` (shift-click the item) keeps it out of every macro.
 
@@ -54,6 +55,7 @@ Prefer one button? Switch to a single **EC Mage** macro: click for water, Shift-
 - `/ec status`: show what each macro is currently using
 - `/ec update`: rescan your bags now
 - `/ec list`: open the Consumables page
+- `/ec minimap`: show or hide the minimap button
 - `/ec debug`: list your bag consumables and how each was read
 - `/ec ignore <item>` / `/ec unignore <item>`: shift-click an item to add or remove it from the ignore list
 - `/ec ignorelist`: show ignored items
