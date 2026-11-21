@@ -38,20 +38,21 @@ local function IsBandagedAura(name, spellID)
     return name == bandagedName
 end
 
-local function BandageDebuff()
+-- The debuff is read only from our own UNIT_AURA handler and remembered here, never from inside
+-- Blizzard's button updates: this client hides ("secret") aura data from addon code at times,
+-- and reading it there raises errors. Every read is wrapped in pcall for the same reason.
+local bandageStart, bandageDuration = 0, 0
+
+local function ReadBandageDebuff()
     if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+        -- Look it up by spell ID only. Walking the aura list by index is what gets blocked.
         local a = C_UnitAuras.GetPlayerAuraBySpellID(RECENTLY_BANDAGED)
-        if a and a.duration and a.duration > 0 and a.expirationTime then return a.expirationTime - a.duration, a.duration end
-    end
-    if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
-        for i = 1, 40 do
-            local a = C_UnitAuras.GetAuraDataByIndex("player", i, "HARMFUL")
-            if not a then break end
-            if IsBandagedAura(a.name, a.spellId) and a.duration and a.expirationTime then
-                return a.expirationTime - a.duration, a.duration
-            end
+        if a and a.duration and a.duration > 0 and a.expirationTime then
+            return a.expirationTime - a.duration, a.duration
         end
-    elseif UnitDebuff then
+        return 0, 0
+    end
+    if UnitDebuff then -- older clients without C_UnitAuras
         for i = 1, 40 do
             local name, _, _, _, duration, expires, _, _, _, spellID = UnitDebuff("player", i)
             if not name then break end
@@ -59,6 +60,18 @@ local function BandageDebuff()
         end
     end
     return 0, 0
+end
+
+local function UpdateBandageDebuff()
+    local ok, start, duration = pcall(ReadBandageDebuff)
+    if ok then
+        bandageStart, bandageDuration = start or 0, duration or 0
+    end
+    -- On failure keep the last known value; it runs out on its own.
+end
+
+local function BandageDebuff()
+    return bandageStart, bandageDuration
 end
 
 local function Wanted(key)
@@ -238,12 +251,17 @@ local function Apply(button)
     StyleCountdown(cd, true) -- the countdown text may only exist now
 end
 
+-- Display only, so never let it raise an error (e.g. if the client hides cooldown data from addons).
+local function SafeApply(button)
+    pcall(Apply, button)
+end
+
 local function Hook(button)
     if hooked[button] then return end
     hooked[button] = true
     table.insert(buttons, button)
     -- Re-apply after Blizzard redraws the button's cooldown (it would clear ours).
-    if button.UpdateCooldown then hooksecurefunc(button, "UpdateCooldown", Apply) end
+    if button.UpdateCooldown then hooksecurefunc(button, "UpdateCooldown", SafeApply) end
 end
 
 local function CollectButtons()
@@ -255,12 +273,12 @@ local function CollectButtons()
     end
 end
 
-if ActionButton_UpdateCooldown then hooksecurefunc("ActionButton_UpdateCooldown", Apply) end
+if ActionButton_UpdateCooldown then hooksecurefunc("ActionButton_UpdateCooldown", SafeApply) end
 
 function EC:RefreshCooldowns()
     if not self.db then return end
     if not self.db.showCooldowns then
-        for _, b in ipairs(buttons) do Apply(b) end -- clears what we added
+        for _, b in ipairs(buttons) do SafeApply(b) end -- clears what we added
         return
     end
     wipe(macroKeys)
@@ -270,11 +288,12 @@ function EC:RefreshCooldowns()
         end
     end
     CollectButtons()
-    for _, b in ipairs(buttons) do Apply(b) end
+    for _, b in ipairs(buttons) do SafeApply(b) end
 end
 
 -- /ec debug: what the cooldown display can see.
 function EC:PrintCooldownDebug()
+    UpdateBandageDebuff()
     local start, duration = BandageDebuff()
     local left = start + duration - GetTime()
     print(("  Recently Bandaged on you: %s"):format(duration > 0 and left > 0 and ("%.0fs left"):format(left) or "no"))
@@ -308,7 +327,8 @@ f:RegisterEvent("PLAYER_REGEN_DISABLED") -- combo macros switch between food/dri
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 local queued = false
-f:SetScript("OnEvent", function()
+f:SetScript("OnEvent", function(_, event)
+    if event == "UNIT_AURA" or event == "PLAYER_ENTERING_WORLD" then UpdateBandageDebuff() end
     -- Many of these fire in bursts and before Blizzard redraws its buttons; refresh once, just after.
     if queued then return end
     queued = true
