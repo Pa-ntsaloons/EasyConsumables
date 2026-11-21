@@ -89,15 +89,20 @@ local DEFAULTS = {
     mageTradeStacks = 2,         -- stacks of conjured water and of food to put in the trade window
     comboModifier = "shift",     -- hold this for the mana side: mana potion in combat, drink out of combat
     comboStyle = "split",        -- "single" = one macro + modifier, "split" = EC Combo (health side) + EC Combo MP (mana side)
-    comboEatMode = "both",
-    mageStyle = "split",         -- "single" = EC Mage (click water, Shift food), "split" = EC Mage (water) + EC Mage Food       -- single style, out of combat: "both" = eat + drink at once, "modifier" = food, modifier = drink
-    useXpFood = false,           -- Well Fed (XP buff) food. Off: never used, so it's saved. On: used before other food/drink
+    comboEatMode = "both",       -- single style, out of combat: "both" = eat + drink at once, "modifier" = food, modifier = drink
+    mageStyle = "split",         -- "single" = EC Mage (click water, Shift food), "split" = EC Mage (water) + EC Mage Food
+    useBuffFood = false,         -- buff food (Well Fed / XP / stat buffs). Off: never used, so it's saved. On: may be used
+    buffFoodFirst = true,        -- with useBuffFood: eat it before other food/drink (off: ranked like any other food)
+    buffFoods = {},              -- [itemID] = true: buff foods seen in your bags (listed in the options)
+    buffFoodOff = {},            -- [itemID] = true: buff foods switched off individually
     preferConjured = false,      -- use conjured items first even if weaker
     preferHealthstone = true,    -- healthstones beat potions for the health macro
     bandageSmartTarget = true,   -- mouseover / friendly target, falls back to self
     perCharacter = true,         -- create macros as character-specific
     skipNoManaMacros = true,     -- don't create drink/mana macros on characters without mana
     announce = false,            -- print when a macro's item changes
+    showCooldowns = true,        -- cooldown swipe on action buttons: Recently Bandaged, potion/healthstone cooldowns
+    comboCooldown = "combat",    -- potion cooldown on the combo buttons: "combat" = only in combat, "always"
     ignored = {},                -- [itemID] = true
 }
 
@@ -164,10 +169,44 @@ local CONJURED_TEXT = ITEM_CONJURED or "Conjured Item"
 
 local cache = {}          -- [itemID] = parsed info (or false = not relevant)
 local incomplete = false  -- some tooltip data wasn't loaded yet
+local noUseTries = {}     -- [itemID] = times we saw it with no "Use:" line (tooltip may still be loading)
+local NO_USE_RETRIES = 5
 
+local function RequestItemData(itemID)
+    if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+end
+
+local function ItemDataLoaded(itemID)
+    if C_Item and C_Item.IsItemDataCachedByID then
+        return C_Item.IsItemDataCachedByID(itemID)
+    end
+    return Compat.GetItemInfo(itemID) ~= nil
+end
+
+local L = ns.L
+local debugText = {} -- [itemID] = the "Use:" text the parser saw, for /ec debug
+
+local function ContainsAny(text, words)
+    for _, w in ipairs(words) do
+        if text:find(w, 1, true) then return true end
+    end
+    return false
+end
+
+-- Rewrite a lowercased "Use:" text from the client's language into English phrasing (Locales.lua).
+local function Normalize(text)
+    for _, r in ipairs(L.rules) do
+        text = text:gsub(r[1], r[2])
+    end
+    return text
+end
+
+-- "61.2", "61,2" (comma decimal), "1,500" / "1.500" (thousands) -> number
 local function ToNum(s)
     if not s then return nil end
-    s = s:gsub(",", ""):gsub("%.$", "")
+    s = s:gsub("[%.,]$", "")
+    s = s:gsub("[,%.](%d%d%d)%f[^%d]", "%1") -- thousands separator: followed by exactly 3 digits
+    s = s:gsub(",", ".")
     return tonumber(s)
 end
 
@@ -197,6 +236,12 @@ local function ParseAmountWord(text, res)
     p, e = text:match("([%d%.]+)%% of your maximum " .. res .. "()")
     if not p then p, e = text:match("([%d%.]+)%% of your " .. res .. "()") end
     if not p then p, e = text:match("([%d%.]+)%% " .. res .. "()") end
+    if not p then
+        -- other word orders ("25% eurer maximalen health"): a percentage shortly before the word
+        local filler
+        p, filler, e = text:match("([%d%.,]+)%%([^%d]-)" .. res .. "()")
+        if filler and #filler > 40 then p = nil end
+    end
     if p then
         p = ToNum(p)
         if p then return nil, p / 100 * TickMultiplier(text:sub(e)) end
@@ -220,19 +265,75 @@ local function IsRed(l)
     return l.r > 0.9 and l.g < 0.25 and l.b < 0.25
 end
 
+-- Battleground-only consumables. The tooltip names the battleground ("Requires Warsong Gulch",
+-- "Only usable in Alterac Valley", or just the name), red when you're not there.
+-- We record the zone instead of caching "unusable", so the item works once you're inside.
+-- Names come from the client (so they're in its language), with English as a fallback.
+local BATTLEGROUNDS = {
+    { map = 1460, name = "Warsong Gulch" },
+    { map = 1461, name = "Arathi Basin" },
+    { map = 1459, name = "Alterac Valley" },
+}
+local zoneNames -- { { lower = "warsong gulch", key = "warsong gulch" }, ... }
+
+local function ZoneNames()
+    if zoneNames then return zoneNames end
+    zoneNames = {}
+    for _, bg in ipairs(BATTLEGROUNDS) do
+        local key = bg.name:lower()
+        table.insert(zoneNames, { lower = key, key = key })
+        if C_Map and C_Map.GetMapInfo then
+            local ok, mi = pcall(C_Map.GetMapInfo, bg.map)
+            if ok and mi and mi.name and mi.name ~= "" and mi.name:lower() ~= key then
+                table.insert(zoneNames, { lower = mi.name:lower(), key = key })
+            end
+        end
+    end
+    return zoneNames
+end
+
+-- Returns the battleground a (non-"Use:") tooltip line restricts the item to.
+local function ZoneRestriction(lower)
+    if lower:find(USE_PREFIX, 1, true) == 1 or #lower > 80 then return nil end
+    for _, z in ipairs(ZoneNames()) do
+        if lower:find(z.lower, 1, true) then return z.key end
+    end
+end
+
+-- Whether you're currently in the battleground with this key.
+local function InZone(key)
+    local here = ((GetInstanceInfo and GetInstanceInfo()) or ""):lower()
+    local real = ((GetRealZoneText and GetRealZoneText()) or ""):lower()
+    for _, z in ipairs(ZoneNames()) do
+        if z.key == key and (z.lower == here or z.lower == real) then return true end
+    end
+    return false
+end
+
 -- Returns info table, false if not a relevant consumable, or nil if data isn't loaded yet.
 local function ParseItem(itemID, bag, slot)
     local _, _, _, _, _, classID, subclassID = Compat.GetItemInfoInstant(itemID)
+    if not classID then return nil end
     if classID ~= CONSUMABLE then return false end
 
+    -- Right after login the item's data is often not loaded yet, and its tooltip comes back
+    -- with only the name. Wait for the data (GET_ITEM_INFO_RECEIVED) instead of caching it.
+    if not ItemDataLoaded(itemID) then
+        RequestItemData(itemID)
+        return nil
+    end
+
     local lines = GetTooltipLines(bag, slot)
-    if not lines or #lines == 0 or lines[1].text == "" then return nil end
+    if not lines or #lines == 0 or lines[1].text == "" then
+        RequestItemData(itemID)
+        return nil
+    end
 
     local info = {
         itemID = itemID,
         name = lines[1].text,
         subclass = subclassID,
-        healthstone = lines[1].text:lower():find("healthstone", 1, true) ~= nil,
+        healthstone = ContainsAny(lines[1].text:lower(), L.healthstone),
     }
 
     local useText
@@ -240,11 +341,16 @@ local function ParseItem(itemID, bag, slot)
         local l = lines[i]
         local t = l.text
         if t ~= "" then
-            if IsRed(l) then info.unusable = true end -- unmet level / skill requirement
-            if t == CONJURED_TEXT then info.conjured = true end
             local lower = t:lower()
-            -- Well Fed food (on WoW Forever this is the XP buff); "experience" catches other wordings.
-            if lower:find("well fed", 1, true) or lower:find("experience", 1, true) then info.wellFed = true end
+            local zone = ZoneRestriction(lower)
+            if zone then
+                info.zone = zone
+            elseif IsRed(l) then
+                info.unusable = true -- unmet level / skill requirement
+            end
+            if t == CONJURED_TEXT then info.conjured = true end
+            -- Buff food: Well Fed (on WoW Forever this is the XP buff), "experience", etc.
+            if ContainsAny(lower, L.wellFed) then info.buff = true end
             if lower:find(USE_PREFIX, 1, true) == 1 then
                 useText = (useText and (useText .. " ") or "") .. lower
             end
@@ -255,7 +361,22 @@ local function ParseItem(itemID, bag, slot)
     info.minLevel = minLevel or 0
     if minLevel and minLevel > UnitLevel("player") then info.unusable = true end
 
-    if not useText then return false end
+    if not useText then
+        -- Could be a tooltip whose spell text hasn't loaded yet; look again a few times
+        -- before deciding the item has no use effect.
+        local tries = (noUseTries[itemID] or 0) + 1
+        noUseTries[itemID] = tries
+        if tries < NO_USE_RETRIES then return nil end
+        return false
+    end
+    noUseTries[itemID] = nil
+
+    local seated = ContainsAny(useText, L.seated) or subclassID == SUB_FOOD
+    -- Any other effect lasting minutes ("gain 12 Stamina for 15 min") also makes it buff food;
+    -- plain food and drink only last seconds.
+    if useText:find("%d%s*" .. L.minute) then info.buff = true end
+    useText = Normalize(useText)
+    debugText[itemID] = useText
 
     -- Bandages
     if subclassID == SUB_BANDAGE or useText:find("heals [%d,%.]+ damage") then
@@ -269,9 +390,6 @@ local function ParseItem(itemID, bag, slot)
     if not (mFlat or mPct) and useText:find("health and mana", 1, true) then
         mFlat, mPct = hFlat, hPct
     end
-
-    local seated = useText:find("seated", 1, true) or useText:find("while eating", 1, true)
-        or useText:find("while drinking", 1, true) or subclassID == SUB_FOOD
 
     if seated then
         if hFlat or hPct then info.food = { flat = hFlat, pct = hPct } end
@@ -293,6 +411,8 @@ EC.Value = Value
 
 -- Iterate bags, parsing (cached) every item. Calls fn(bag, slot, itemID, count, locked, info) for relevant items.
 local function ForEachConsumable(fn)
+    -- The backpack always has slots; 0 means bag contents aren't available yet.
+    if (Compat.GetNumSlots(0) or 0) == 0 then incomplete = true end
     for bag = 0, NUM_BAGS do
         for slot = 1, (Compat.GetNumSlots(bag) or 0) do
             local id, count, locked = Compat.GetSlot(bag, slot)
@@ -323,19 +443,25 @@ function EC:Scan()
         end
     end)
 
-    local maxHP = UnitHealthMax("player")
-    local maxMana = UnitPowerMax("player", MANA)
+    local maxHP = UnitHealthMax("player") or 0
+    local maxMana = UnitPowerMax("player", MANA) or 0
+    -- Unit stats can read 0 for a moment after login, which would zero out % based items.
+    if maxHP <= 1 then incomplete = true end
 
     local candidates = { food = {}, drink = {}, health = {}, mana = {}, bandage = {} }
     for id, it in pairs(items) do
         local info = it.info
-        if not info.unusable then
+        if not info.unusable and (not info.zone or InZone(info.zone)) then
             local function add(cat, value)
                 if value and value > 0 then
                     table.insert(candidates[cat], { itemID = id, value = value, count = it.count, info = info })
                 end
             end
-            local skipBuff = info.wellFed and not db.useXpFood
+            local isBuffFood = info.buff and (info.food or info.drink)
+            if isBuffFood and not db.buffFoods[id] then
+                db.buffFoods[id] = true -- remember it for the per-item list in the options
+            end
+            local skipBuff = isBuffFood and (not db.useBuffFood or db.buffFoodOff[id])
             if info.food and not skipBuff then add("food", Value(info.food, maxHP)) end
             if info.drink and not skipBuff then add("drink", Value(info.drink, maxMana)) end
             if info.hpot then add("health", Value(info.hpot, maxHP)) end
@@ -347,8 +473,9 @@ function EC:Scan()
     local picks = {}
     for cat, list in pairs(candidates) do
         table.sort(list, function(a, b)
-            if (cat == "food" or cat == "drink") and (a.info.wellFed or false) ~= (b.info.wellFed or false) then
-                return a.info.wellFed == true -- only reachable when useXpFood is on
+            if (cat == "food" or cat == "drink") and db.buffFoodFirst
+                and (a.info.buff or false) ~= (b.info.buff or false) then
+                return a.info.buff == true -- only reachable when buff food is allowed
             end
             if db.preferConjured and (a.info.conjured or false) ~= (b.info.conjured or false) then
                 return a.info.conjured == true
@@ -677,11 +804,17 @@ function EC:SetMageStyle(style)
 end
 
 local warnedFull = false
+local macrosReady = false -- the game has loaded the macro list (until then lookups by name return 0)
 
 function EC:WriteMacro(def, body)
     local idx = GetMacroIndexByName(def.name)
     if idx == 0 then
         if not self:ShouldCreate(def.key) then return end
+        -- Creating before the macro list loads would duplicate macros that already exist.
+        if not macrosReady then
+            incomplete = true
+            return
+        end
         local numAccount, numChar = GetNumMacros()
         local perChar = self.db.perCharacter
         if (perChar and numChar >= (MAX_CHARACTER_MACROS or 18))
@@ -708,6 +841,8 @@ end
 EC.picks = {}
 local pendingUpdate = false
 local scheduled = false
+local retries = 0
+local MAX_RETRIES = 20
 
 local function MacroFrameOpen()
     return MacroFrame and MacroFrame:IsShown()
@@ -743,11 +878,18 @@ function EC:Update()
         self:WriteMacro(def, BODY[def.key](picks, self.db))
     end
 
+    -- Something wasn't loaded yet: look again shortly (capped so a broken item can't loop forever).
     if incomplete then
-        C_Timer.After(2, function() EC:RequestUpdate() end)
+        retries = retries + 1
+        if retries <= MAX_RETRIES then
+            C_Timer.After(retries <= 5 and 1 or 3, function() EC:RequestUpdate() end)
+        end
+    else
+        retries = 0
     end
 
     if self.OnPicksChanged then self:OnPicksChanged() end
+    if self.RefreshCooldowns then self:RefreshCooldowns() end
 end
 
 -- Cheap update of just the mage macro (target changes, spells learned).
@@ -776,6 +918,8 @@ end
 
 function EC:ClearCache()
     wipe(cache)
+    wipe(noUseTries)
+    retries = 0
 end
 
 ---------------------------------------------------------------------------
@@ -784,6 +928,8 @@ end
 
 EC:RegisterEvent("ADDON_LOADED")
 EC:RegisterEvent("PLAYER_LOGIN")
+EC:RegisterEvent("UPDATE_MACROS")
+EC:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 local function HookMacroFrame()
     if MacroFrame and not EC.hookedMacroFrame then
@@ -810,6 +956,13 @@ EC:SetScript("OnEvent", function(self, event, arg1)
                 self.db.ignoreBuffFood = nil
                 self.db.settingsVersion = 3
             end
+            -- v4: "Well Fed (XP buff) food" became "buff food" with per-item switches.
+            if self.db.settingsVersion < 4 then
+                if self.db.useXpFood ~= nil then self.db.useBuffFood = self.db.useXpFood end
+                if self.db.xpFoodFirst ~= nil then self.db.buffFoodFirst = self.db.xpFoodFirst end
+                self.db.useXpFood, self.db.xpFoodFirst = nil, nil
+                self.db.settingsVersion = 4
+            end
             if self.InitOptions then self:InitOptions() end
         end
         HookMacroFrame() -- Blizzard_MacroUI is load-on-demand
@@ -825,7 +978,25 @@ EC:SetScript("OnEvent", function(self, event, arg1)
             self:RegisterEvent("SPELLS_CHANGED")
             self:RegisterEvent("TRADE_SHOW")
         end
+        self:RegisterEvent("ZONE_CHANGED_NEW_AREA") -- battleground-only items
         self:RequestUpdate()
+        if not ns.localeSupported then
+            print(PREFIX .. "your client language (" .. tostring(ns.locale) .. ") isn't supported yet, so " ..
+                "some items may not be recognised. /ec debug shows what was read.")
+        end
+        -- Bags, item data and unit stats trickle in over the first few seconds after login,
+        -- often without an event we'd notice; rescan a few times to be safe.
+        for _, delay in ipairs({ 3, 8, 15 }) do
+            C_Timer.After(delay, function() EC:RequestUpdate() end)
+        end
+    elseif event == "UPDATE_MACROS" or event == "PLAYER_ENTERING_WORLD" then
+        -- UPDATE_MACROS also fires for our own edits, so only react the first time.
+        if not macrosReady then
+            macrosReady = true
+            if self.db then self:RequestUpdate() end
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            self:RequestUpdate() -- loading screens, e.g. into or out of a battleground
+        end
     elseif event == "PLAYER_TARGET_CHANGED" or event == "SPELLS_CHANGED" then
         self:UpdateMageMacro()
     elseif event == "TRADE_SHOW" then
@@ -863,6 +1034,47 @@ function EC:PrintStatus()
     end
 end
 
+-- Every consumable in your bags and what the parser made of it; for checking translations.
+function EC:PrintDebug()
+    print(PREFIX .. "bag consumables (client " .. tostring(ns.locale) .. "):")
+    local seen = {}
+    ForEachConsumable(function() end) -- make sure everything is parsed
+    for bag = 0, NUM_BAGS do
+        for slot = 1, (Compat.GetNumSlots(bag) or 0) do
+            local id = Compat.GetSlot(bag, slot)
+            if id and not seen[id] and select(6, Compat.GetItemInfoInstant(id)) == CONSUMABLE then
+                seen[id] = true
+                local info = cache[id]
+                local parts = {}
+                if info then
+                    local function amt(a) return ("%s%s"):format(a.flat and ("%g"):format(a.flat) or "",
+                        a.pct and (" %g%%"):format(a.pct * 100) or "") end
+                    if info.food then table.insert(parts, "food " .. amt(info.food)) end
+                    if info.drink then table.insert(parts, "drink " .. amt(info.drink)) end
+                    if info.hpot then table.insert(parts, "health " .. amt(info.hpot)) end
+                    if info.mpot then table.insert(parts, "mana " .. amt(info.mpot)) end
+                    if info.bandage then table.insert(parts, "bandage " .. ("%g"):format(info.bandage)) end
+                    if info.healthstone then table.insert(parts, "healthstone") end
+                    if info.conjured then table.insert(parts, "conjured") end
+                    if info.buff then table.insert(parts, "buff food") end
+                    if info.zone then table.insert(parts, "only in " .. info.zone) end
+                    if info.unusable then table.insert(parts, "|cffff4040can't use|r") end
+                end
+                local status = info == nil and "|cffffff00still loading|r"
+                    or (#parts > 0 and table.concat(parts, ", ")) or "|cff888888not recognised|r"
+                print(("  %s: %s"):format(select(2, Compat.GetItemInfo(id)) or ("item " .. id), status))
+                if not info and debugText[id] then
+                    print("    |cff888888read as: " .. debugText[id] .. "|r")
+                end
+            end
+        end
+    end
+    if self.PrintCooldownDebug then
+        print(PREFIX .. "cooldown display:")
+        self:PrintCooldownDebug()
+    end
+end
+
 SLASH_EASYCONSUMABLES1 = "/ec"
 SLASH_EASYCONSUMABLES2 = "/easyconsumables"
 SlashCmdList.EASYCONSUMABLES = function(msg)
@@ -872,6 +1084,8 @@ SlashCmdList.EASYCONSUMABLES = function(msg)
         EC:OpenOptions()
     elseif cmd == "status" then
         EC:PrintStatus()
+    elseif cmd == "debug" then
+        EC:PrintDebug()
     elseif cmd == "update" or cmd == "refresh" then
         EC:ClearCache()
         EC:Update()
@@ -899,6 +1113,7 @@ SlashCmdList.EASYCONSUMABLES = function(msg)
         print("  /ec - open options")
         print("  /ec status - show the current best item for each macro")
         print("  /ec update - rescan bags and rewrite macros now")
+        print("  /ec debug - list bag consumables and how each was read")
         print("  /ec ignore <item> - never pick this item (shift-click it into chat)")
         print("  /ec unignore <item> - allow an ignored item again")
         print("  /ec ignorelist - list ignored items")

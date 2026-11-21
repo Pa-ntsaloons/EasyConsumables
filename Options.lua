@@ -122,9 +122,18 @@ local function PickupFor(def)
     if GetMacroIndexByName(def.name) > 0 then
         PickupMacro(def.name)
     else
-        print("|cff33ff99EasyConsumables|r: " .. def.name .. " doesn't exist yet - enable it below.")
+        print("|cff33ff99EasyConsumables|r: " .. def.name .. " doesn't exist yet - tick its box in /ec to enable it.")
     end
 end
+
+local CHECK_TIPS = {
+    mage = "Target a friendly player, then: click = Conjure Water, Shift-click = Conjure Food, "
+        .. "at the highest rank they can use for their level (yours with no target). "
+        .. "Alt-click opens trade and puts conjured water and food they can use into it.",
+    combo = "Food/drink out of combat, potions in combat. Set it up in the Combo section below.",
+}
+
+local CHECK_W = 28 -- room for the enable checkbox at the start of each row
 
 local function CreateRow(def)
     local row = CreateFrame("Button", nil, picksBlock)
@@ -133,17 +142,34 @@ local function CreateRow(def)
     row:RegisterForClicks("LeftButtonUp")
     row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 
+    -- Enable checkbox. Follow-on macros (EC Combo MP, EC Mage Food) are switched with their
+    -- main macro, so they get no box, just the same indent.
+    if not def.hideInList then
+        local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        cb:SetSize(24, 24)
+        cb:SetPoint("LEFT", row, "LEFT", 0, 0)
+        cb:SetScript("OnClick", function(self)
+            EC.db.macros[def.key] = self:GetChecked() and true or false
+            EC:RequestUpdate()
+            Refresh()
+        end)
+        local tip = (CHECK_TIPS[def.key] and (CHECK_TIPS[def.key] .. "\n\n") or "")
+            .. "On: " .. def.name .. " is created and kept up to date.\nOff: it's no longer updated."
+        Tooltip(cb, "Enable " .. def.name, tip)
+        row.check = cb
+    end
+
     row.icon = row:CreateTexture(nil, "ARTWORK")
     row.icon:SetSize(34, 34)
-    row.icon:SetPoint("LEFT", 2, 0)
+    row.icon:SetPoint("LEFT", CHECK_W + 2, 0)
 
     row.label = row:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    row.label:SetPoint("TOPLEFT", row, "TOPLEFT", 46, -4)
+    row.label:SetPoint("TOPLEFT", row, "TOPLEFT", CHECK_W + 46, -4)
     row.label:SetPoint("TOPRIGHT", row, "TOPRIGHT", -4, -4)
     row.label:SetJustifyH("LEFT")
 
     row.item = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    row.item:SetPoint("TOPLEFT", row, "TOPLEFT", 46, -18)
+    row.item:SetPoint("TOPLEFT", row, "TOPLEFT", CHECK_W + 46, -18)
     row.item:SetPoint("TOPRIGHT", row, "TOPRIGHT", -4, -18)
     row.item:SetJustifyH("LEFT")
     row.item:SetJustifyV("TOP")
@@ -228,7 +254,12 @@ local function RefreshPicks()
             row.label:SetText(("%s  |cff888888%s|r"):format(label, def.name))
             row.item:SetText(text)
             row.icon:SetTexture(tex or (entry and Compat.GetItemIcon(entry.itemID)) or 134400)
-            row:SetAlpha(EC:IsEnabled(def.key) and 1 or 0.4)
+            -- Dim the row, not its checkbox, when the macro is off.
+            local a = EC:IsEnabled(def.key) and 1 or 0.4
+            row.icon:SetAlpha(a)
+            row.label:SetAlpha(a)
+            row.item:SetAlpha(a)
+            if row.check then row.check:SetChecked(EC.db.macros[def.key] and true or false) end
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", picksBlock, "TOPLEFT", 0, py)
             row:SetPoint("TOPRIGHT", picksBlock, "TOPRIGHT", 0, py)
@@ -263,10 +294,10 @@ local function BuildPanel()
     Text("GameFontNormalHuge", "EasyConsumables", 0, 30)
     Text("GameFontHighlightSmall",
         "Keeps macros pointed at the best consumable in your bags. They update whenever your bags change "
-        .. "(after combat if you're fighting). Click or drag a row below onto your action bar.", 0, 28)
+        .. "(after combat if you're fighting). Tick a macro to turn it on; click or drag its row onto your action bar.", 0, 40)
 
     -- Current picks ---------------------------------------------------------
-    Header("Current best  |cff888888(click or drag to action bar)|r")
+    Header("Macros  |cff888888(click or drag to action bar)|r")
     picksBlock = CreateFrame("Frame", nil, content)
     picksBlock:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, y)
     picksBlock:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
@@ -299,24 +330,6 @@ local function BuildPanel()
     end)
     Advance(26)
 
-    -- Macros ----------------------------------------------------------------
-    Header("Macros")
-    for _, def in ipairs(EC.MACROS) do
-        if not def.hideInList then
-            local tip
-            if def.key == "mage" then
-                tip = "Target a friendly player, then: click = Conjure Water, Shift-click = Conjure Food, "
-                    .. "at the highest rank they can use for their level (yours with no target). "
-                    .. "Alt-click opens trade and puts conjured water and food they can use into it."
-            elseif def.key == "combo" then
-                tip = "Food/drink out of combat, potions in combat. Set it up in the Combo section below."
-            end
-            local label = def.key == "combo" and "Combo (food/drink out of combat, potions in combat)" or def.label
-            Check(("%s  |cff888888(%s)|r"):format(label, def.name), tip,
-                function() return EC.db.macros[def.key] end,
-                function(v) EC.db.macros[def.key] = v end)
-        end
-    end
 
     -- Combo -----------------------------------------------------------------
     Header("Combo macro")
@@ -362,6 +375,18 @@ local function BuildPanel()
     end)
     Advance(28)
 
+    Text("GameFontNormalSmall", "Potion cooldown on the combo buttons:", 4, 16)
+    local comboCdOn = function() return EC.db.macros.combo and EC.db.showCooldowns end
+    Radio(function() return EC.db.comboCooldown end, function(v)
+        EC.db.comboCooldown = v
+        EC:RefreshCooldowns()
+    end, {
+        { "combat", "Only in combat",
+          "Out of combat the combo buttons are your food and drink, so they show no cooldown." },
+        { "always", "Always",
+          "Show the potion cooldown even out of combat, so you can see it before a pull." },
+    }, 16, comboCdOn)
+
     -- Mage ------------------------------------------------------------------
     Header("Mage conjure macro")
     local mageOn = function() return EC.db.macros.mage and Compat.IsMage() end
@@ -372,33 +397,147 @@ local function BuildPanel()
           "Ranks are picked for your targeted friendly player's level. Alt-click trades to them." },
     }, 0, mageOn)
 
+    -- Buff food --------------------------------------------------------------
+    Header("Buff food")
+    local buffOn = function() return EC.db.useBuffFood end
+    Check("Use buff food",
+        "Food and drink that also give a buff: Well Fed (the XP buff), stats, and so on.\n"
+            .. "Off: it's never used, so it's saved.\nOn: it can be picked, and you can switch single items off below.",
+        function() return EC.db.useBuffFood end, function(v) EC.db.useBuffFood = v end)
+    Check("Eat it before other food",
+        "On: buff food is eaten before anything else, even if it restores less, to keep the buff up.\n"
+            .. "Off: it's only picked when it's the best food you have.",
+        function() return EC.db.buffFoodFirst end, function(v) EC.db.buffFoodFirst = v end,
+        24, buffOn)
+    local listTitle = Text("GameFontNormalSmall", "Buff foods you've had (turn one off to never use it):", 28, 18)
+    table.insert(refreshers, function()
+        listTitle:SetFontObject(buffOn() and "GameFontNormalSmall" or "GameFontDisableSmall")
+    end)
+
+    -- The list changes as new buff foods turn up, so everything after it hangs off its bottom.
+    local buffBlock = CreateFrame("Frame", nil, content)
+    buffBlock:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + 24, y)
+    buffBlock:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, y)
+    buffBlock:SetHeight(1)
+    local buffRows = {}
+    local emptyText = buffBlock:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    emptyText:SetPoint("TOPLEFT", 4, -4)
+    emptyText:SetText("None yet. Buff foods show up here once they've been in your bags.")
+
+    local GetCount = (C_Item and C_Item.GetItemCount) or GetItemCount
+
+    local function BuffRow(i)
+        if buffRows[i] then return buffRows[i] end
+        local cb = CreateFrame("CheckButton", nil, buffBlock, "UICheckButtonTemplate")
+        cb:SetSize(22, 22)
+        cb:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        cb.icon = cb:CreateTexture(nil, "ARTWORK")
+        cb.icon:SetSize(18, 18)
+        cb.icon:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+        cb.text = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        cb.text:SetPoint("LEFT", cb.icon, "RIGHT", 6, 0)
+        cb.text:SetJustifyH("LEFT")
+        cb:SetHitRectInsets(0, -300, 0, 0)
+        cb:SetScript("OnClick", function(self, button)
+            local id = self.itemID
+            if button == "RightButton" then
+                -- Forget it (it comes back if it's in your bags again).
+                EC.db.buffFoods[id] = nil
+                EC.db.buffFoodOff[id] = nil
+            else
+                EC.db.buffFoodOff[id] = (not self:GetChecked()) or nil
+            end
+            EC:RequestUpdate()
+            Refresh()
+        end)
+        cb:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetItemByID(self.itemID)
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("On: can be used. Off: never used.", 0, 1, 0, true)
+            GameTooltip:AddLine("Right-click to remove it from this list.", 0.6, 0.6, 0.6, true)
+            GameTooltip:Show()
+        end)
+        cb:SetScript("OnLeave", GameTooltip_Hide)
+        buffRows[i] = cb
+        return cb
+    end
+
+    table.insert(refreshers, function()
+        local ids = {}
+        for id in pairs(EC.db.buffFoods) do table.insert(ids, id) end
+        local names = {}
+        for _, id in ipairs(ids) do
+            names[id] = Compat.GetItemName(id)
+            if not names[id] and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+        end
+        table.sort(ids, function(a, b) return (names[a] or ("~" .. a)) < (names[b] or ("~" .. b)) end)
+
+        local on = buffOn()
+        for i, id in ipairs(ids) do
+            local cb = BuffRow(i)
+            cb.itemID = id
+            cb:ClearAllPoints()
+            cb:SetPoint("TOPLEFT", buffBlock, "TOPLEFT", 0, -(i - 1) * 22)
+            cb:SetChecked(not EC.db.buffFoodOff[id])
+            cb:SetEnabled(on)
+            cb.icon:SetTexture(Compat.GetItemIcon(id) or 134400)
+            local itemOn = on and not EC.db.buffFoodOff[id]
+            cb.icon:SetDesaturated(not itemOn)
+            cb.icon:SetAlpha(itemOn and 1 or 0.5)
+            local _, _, quality = Compat.GetItemInfo(id)
+            local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+                and ITEM_QUALITY_COLORS[quality].hex or "|cffffffff"
+            if not itemOn then color = "|cff808080" end
+            local count = GetCount and GetCount(id) or 0
+            cb.text:SetText(("%s%s|r  |cff888888%s|r"):format(color, names[id] or ("item " .. id),
+                count > 0 and ("x" .. count) or "not in bags"))
+            cb:Show()
+        end
+        for i = #ids + 1, #buffRows do buffRows[i]:Hide() end
+        emptyText:SetShown(#ids == 0)
+        buffBlock:SetHeight(#ids > 0 and #ids * 22 or 20)
+    end)
+
+    local part1Height = -y
+    local part1 = content
+    local part2 = CreateFrame("Frame", nil, part1)
+    part2:SetPoint("TOPLEFT", buffBlock, "BOTTOMLEFT", -(PAD + 24), -4)
+    part2:SetPoint("TOPRIGHT", buffBlock, "BOTTOMRIGHT", PAD, -4)
+    content = part2
+    y = 0
+
     -- Rules -----------------------------------------------------------------
     Header("Rules")
     local opts = {
-        { "useXpFood", "Use Well Fed (XP buff) food first", "Off: food that gives the Well Fed buff is never used, so it's saved.\nOn: it's eaten before any other food, even if it restores less, to keep the buff up." },
         { "preferHealthstone", "Prefer Healthstones over potions", "Healthstones are free and have their own cooldown, so use them first." },
         { "preferConjured", "Use conjured items even when a bought item is better", "Off (recommended): conjured items are used first when they're as good as a bought one, but a bought item that restores more is used instead.\nOn: conjured items are always used first, even if they restore less." },
         { "bandageSmartTarget", "Bandage: mouseover / friendly target, else self", "Unchecked: always bandage yourself." },
         { "skipNoManaMacros", "Don't create Drink/Mana macros on characters without mana" },
         { "perCharacter", "Create macros as character-specific", "Unchecked: create them in the General (account-wide) macro tab. Only affects newly created macros." },
         { "announce", "Announce in chat when a macro's item changes" },
+        { "showCooldowns", "Show cooldowns on EC macro buttons", "Shows the Recently Bandaged wait on EC Bandage, and the potion / Healthstone cooldown on EC Health, EC Mana and the combo macros.\nWorks on Blizzard's action bars.", function() EC:RefreshCooldowns(); Refresh() end },
     }
     for _, o in ipairs(opts) do
-        local key = o[1]
-        Check(o[2], o[3], function() return EC.db[key] end, function(v) EC.db[key] = v end)
+        local key, after = o[1], o[4]
+        Check(o[2], o[3], function() return EC.db[key] end, function(v)
+            EC.db[key] = v
+            if after then after() end
+        end)
     end
 
     Advance(8)
     Text("GameFontDisableSmall", "Exclude a specific item: /ec ignore [shift-click item]     All commands: /ec help", 0, 16)
     Advance(PAD)
 
-    local settingsHeight = -y
+    local part2Height = -y
     content = outer
     table.insert(refreshers, function()
-        settings:SetHeight(settingsHeight)
-        -- title/description/header (~ top part) + picks + settings
+        settings:SetHeight(part1Height)
+        part2:SetHeight(part2Height)
+        -- title/description/header (~ top part) + picks + settings above the buff list + list + the rest
         local top = select(5, picksBlock:GetPoint(1)) or 0
-        content:SetHeight(-top + picksBlock:GetHeight() + 6 + settingsHeight)
+        content:SetHeight(-top + picksBlock:GetHeight() + 6 + part1Height + buffBlock:GetHeight() + 4 + part2Height)
     end)
 
     panel:SetScript("OnShow", Refresh)
