@@ -1,6 +1,8 @@
 # Changelog
 
-## 2.0.0 — 2026-11-21
+## 2.0.0
+
+_Released 2026-11-21_
 
 ### Fixes
 - Macros no longer pick the wrong item, or nothing at all, right after logging in. Items whose data hadn't loaded yet were treated as non-consumables for the rest of the session; they're now rechecked once the data arrives, and the addon rescans a few times in the first seconds after login.
@@ -35,11 +37,15 @@
 - Each macro's on/off switch is now next to its row in the options.
 - Code reorganised into smaller files, one per job, with no change in behaviour.
 
-## 1.0.1 — 2026-11-13
+## 1.0.1
+
+_Released 2026-11-13_
 
 - New option **Use Well Fed (XP buff) food first**, replacing "Ignore buff food". Off (default): Well Fed food is never used, so it's saved. On: it's eaten before any other food to keep the XP buff up.
 
-## 1.0.0 — 2026-11-13
+## 1.0.0
+
+_Released 2026-11-13_
 
 First release.
 
